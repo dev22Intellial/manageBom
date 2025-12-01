@@ -1,0 +1,6 @@
+Django
+openpyxl
+pandas
+python-docx
+pdfplumber
+PyPDF2

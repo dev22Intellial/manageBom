@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">BOM Comparison Results for Master BOM: <strong>{{ master_bom_name }}</strong></h2>
+
+    {% if global_parsing_errors %}
+        <div class="alert alert-warning">
+            <h4>Errors during target file parsing:</h4>
+            <ul>
+                {% for error in global_parsing_errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    {% if not all_comparison_results %}
+        <div class="alert alert-info">
+            No comparison results to display. Please ensure target files were uploaded and parsed successfully.
+        </div>
+    {% endif %}
+
+    {% for comparison in all_comparison_results %}
+    <div class="card mb-5">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0">Comparison with: <strong>{{ comparison.target_file_name }}</strong></h4>
+        </div>
+        <div class="card-body">
+            {# Summary Section #}
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="card text-center bg-success text-white">
+                        <div class="card-body p-2">
+                            <h5 class="card-title mb-0">{{ comparison.results.summary.perfectly_matching }}</h5>
+                            <p class="card-text mb-0">Perfectly Matching Parts</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card text-center bg-warning">
+                        <div class="card-body p-2">
+                            <h5 class="card-title mb-0">{{ comparison.results.summary.partially_matching }}</h5>
+                            <p class="card-text mb-0">Partially Matching Parts</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card text-center bg-danger text-white">
+                        <div class="card-body p-2">
+                            <h5 class="card-title mb-0">{{ comparison.results.summary.totally_different }}</h5>
+                            <p class="card-text mb-0">Totally Different Parts</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Matching Parts -->
+            {% if comparison.results.matching_parts %}
+            <h5 class="mt-3">Matching Parts (Quantity/Designator Changes Highlighted)</h5>
+            <div class="table-responsive">
+                <table class="table table-striped table-bordered table-sm">
+                    <thead>
+                        <tr>
+                            <th>MPN</th>
+                            <th>Manufacturer</th>
+                            <th>Master Qty</th>
+                            <th>Target Qty</th>
+                            <th>Master Designators</th>
+                            <th>Target Designators</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for part in comparison.results.matching_parts %}
+                        <tr {% if part.status == 'Quantity/Designator Changed' %}class="table-warning"{% endif %}>
+                            <td>{{ part.mpn }}</td>
+                            <td>{{ part.manufacturer }}</td>
+                            <td>{% if part.status == 'Quantity/Designator Changed' %}<span class="fw-bold">{{ part.master_quantity }}</span>{% else %}{{ part.quantity }}{% endif %}</td>
+                            <td>{% if part.status == 'Quantity/Designator Changed' %}<span class="fw-bold">{{ part.target_quantity }}</span>{% else %}{{ part.quantity }}{% endif %}</td>
+                            <td>{{ part.master_designators|default:part.designators }}</td>
+                            <td>{{ part.target_designators|default:part.designators }}</td>
+                            <td>{{ part.status }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+                <p class="text-muted">No matching parts found.</p>
+            {% endif %}
+
+            <!-- Added Parts -->
+            {% if comparison.results.added_parts %}
+            <h5 class="mt-4">Added Parts (in Target BOM, not in Master BOM)</h5>
+            <div class="table-responsive">
+                <table class="table table-striped table-bordered table-sm">
+                    <thead>
+                        <tr>
+                            <th>MPN</th>
+                            <th>Manufacturer</th>
+                            <th>Quantity</th>
+                            <th>Designators</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for part in comparison.results.added_parts %}
+                        <tr class="table-success">
+                            <td>{{ part.mpn }}</td>
+                            <td>{{ part.manufacturer }}</td>
+                            <td>{{ part.quantity }}</td>
+                            <td>{{ part.designators }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+                <p class="text-muted">No parts added in target BOM.</p>
+            {% endif %}
+
+            <!-- Removed Parts -->
+            {% if comparison.results.removed_parts %}
+            <h5 class="mt-4">Removed Parts (in Master BOM, not in Target BOM)</h5>
+            <div class="table-responsive">
+                <table class="table table-striped table-bordered table-sm">
+                    <thead>
+                        <tr>
+                            <th>MPN</th>
+                            <th>Manufacturer</th>
+                            <th>Quantity</th>
+                            <th>Designators</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for part in comparison.results.removed_parts %}
+                        <tr class="table-danger">
+                            <td>{{ part.mpn }}</td>
+                            <td>{{ part.manufacturer }}</td>
+                            <td>{{ part.quantity }}</td>
+                            <td>{{ part.designators }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+                <p class="text-muted">No parts removed from master BOM.</p>
+            {% endif %}
+
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,263 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <!-- Left Column: BOM File List -->
+    <div class="col-md-4">
+        <h2>Master BOMs</h2>
+        <p>Select a file to view its contents.</p>
+        <div class="list-group" id="bom-file-list">
+            {% for bom in master_boms %}
+                <a href="#" class="list-group-item list-group-item-action" data-bom-id="{{ bom.id }}">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h5 class="mb-1">{{ bom.name }}</h5>
+                        <small>{{ bom.uploaded_at|date:"Y-m-d" }}</small>
+                    </div>
+                    <small>Click to view data.</small>
+                </a>
+            {% empty %}
+                <p>No master BOM files uploaded yet. <a href="{% url 'upload_master_bom' %}">Upload one now</a>.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Right Column: BOM Data View -->
+    <div class="col-md-8">
+        <div id="bom-data-container" class="mt-4">
+            <div class="card">
+                <div class="card-body">
+                    <h4 id="bom-file-name" class="card-title">Please select a BOM file</h4>
+                    <div id="bom-table-container" class="table-responsive" style="display: none;">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>MPN</th>
+                                    <th>Manufacturer</th>
+                                    <th>Quantity</th>
+                                    <th>Reference Designators</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bom-table-body">
+                                <!-- Data will be injected here by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="loading-spinner" class="text-center" style="display: none;">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Comparison Upload Form -->
+        <div id="compare-section" class="mt-4" style="display: none;">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="card-title">Compare with Target Files</h4>
+                    <form id="compare-form" method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        <input type="hidden" name="master_bom_id" id="master-bom-id-input">
+                        <div class="mb-3">
+                            <label for="target-files-input" class="form-label">Upload 1-5 Target Files</label>
+                            <input class="form-control" type="file" id="target-files-input" name="target_files" multiple 
+                                   accept=".xlsx,.csv,.docx,.pdf,.txt">
+                            <div id="selected-files-display" class="mt-2">
+                                <span id="file-count" class="badge bg-secondary">0 files selected</span>
+                                <ul id="file-list" class="list-group list-group-flush small"></ul>
+                            </div>
+                            <div id="file-error-message" class="alert alert-danger mt-2" style="display: none;"></div>
+                        </div>
+                        <button type="submit" class="btn btn-secondary">Compare Files</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const bomFileList = document.getElementById('bom-file-list');
+    const bomFileName = document.getElementById('bom-file-name');
+    const tableContainer = document.getElementById('bom-table-container');
+    const tableBody = document.getElementById('bom-table-body');
+    const loadingSpinner = document.getElementById('loading-spinner');
+    const compareSection = document.getElementById('compare-section');
+    const compareForm = document.getElementById('compare-form');
+    const masterBomIdInput = document.getElementById('master-bom-id-input');
+    const targetFilesInput = document.getElementById('target-files-input');
+    const fileCountSpan = document.getElementById('file-count');
+    const fileListUl = document.getElementById('file-list');
+    const fileErrorMessage = document.getElementById('file-error-message');
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    let selectedTargetFiles = []; // Stores File objects
+
+    function updateSelectedFilesDisplay() {
+        fileListUl.innerHTML = '';
+        if (selectedTargetFiles.length > 0) {
+            selectedTargetFiles.forEach((file, index) => {
+                const listItem = document.createElement('li');
+                listItem.classList.add('list-group-item', 'd-flex', 'justify-content-between', 'align-items-center');
+                listItem.textContent = file.name;
+                
+                const removeBtn = document.createElement('button');
+                removeBtn.classList.add('btn', 'btn-sm', 'btn-outline-danger');
+                removeBtn.textContent = 'Remove';
+                removeBtn.type = 'button'; // Prevent form submission
+                removeBtn.onclick = function() {
+                    selectedTargetFiles.splice(index, 1);
+                    updateSelectedFilesDisplay();
+                };
+                listItem.appendChild(removeBtn);
+                fileListUl.appendChild(listItem);
+            });
+            fileCountSpan.textContent = `${selectedTargetFiles.length} files selected`;
+            fileCountSpan.classList.replace('bg-secondary', 'bg-info');
+        } else {
+            fileCountSpan.textContent = '0 files selected';
+            fileCountSpan.classList.replace('bg-info', 'bg-secondary');
+        }
+        validateFileCount();
+    }
+
+    function validateFileCount() {
+        if (selectedTargetFiles.length === 0) {
+            fileErrorMessage.textContent = 'Please select at least 1 target file.';
+            fileErrorMessage.style.display = 'block';
+            return false;
+        } else if (selectedTargetFiles.length > 5) {
+            fileErrorMessage.textContent = `You can select a maximum of 5 target files. You have selected ${selectedTargetFiles.length}.`;
+            fileErrorMessage.style.display = 'block';
+            return false;
+        }
+        fileErrorMessage.style.display = 'none';
+        return true;
+    }
+
+    targetFilesInput.addEventListener('change', function(event) {
+        // Append new files to the selectedTargetFiles array
+        for (const file of event.target.files) {
+            selectedTargetFiles.push(file);
+        }
+        // Clear the input so the same files can be selected again or new ones added
+        event.target.value = ''; 
+        updateSelectedFilesDisplay();
+    });
+
+    compareForm.addEventListener('submit', function(event) {
+        event.preventDefault(); // Prevent default form submission
+
+        if (!validateFileCount()) {
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('master_bom_id', masterBomIdInput.value);
+        formData.append('csrfmiddlewaretoken', csrfToken);
+
+        selectedTargetFiles.forEach(file => {
+            formData.append('target_files', file, file.name);
+        });
+
+        // Set action dynamically again, just in case
+        const actionUrl = `/bom/compare/${masterBomIdInput.value}/`;
+
+        // Temporarily disable button and show loading?
+        const submitButton = compareForm.querySelector('button[type="submit"]');
+        submitButton.disabled = true;
+        submitButton.textContent = 'Comparing...';
+
+        fetch(actionUrl, {
+            method: 'POST',
+            body: formData,
+        })
+        .then(response => {
+            // Check if it's a redirect (status 302) or an error (e.g., 500)
+            if (response.redirected) {
+                window.location.href = response.url; // Follow the redirect
+            } else if (!response.ok) {
+                return response.json().then(errorData => {
+                    throw new Error(errorData.error || 'Server error occurred during comparison.');
+                });
+            } else {
+                // Should not happen if backend always redirects on success
+                throw new Error('Unexpected server response.');
+            }
+        })
+        .catch(error => {
+            console.error('Comparison failed:', error);
+            fileErrorMessage.textContent = `Comparison error: ${error.message}`;
+            fileErrorMessage.style.display = 'block';
+        })
+        .finally(() => {
+            submitButton.disabled = false;
+            submitButton.textContent = 'Compare Files';
+        });
+    });
+
+    // Initial check for file selection on page load (though unlikely)
+    updateSelectedFilesDisplay();
+
+    // Original BOM list click handler (unchanged)
+    bomFileList.addEventListener('click', function(event) {
+        event.preventDefault();
+        const target = event.target.closest('.list-group-item');
+        if (!target) return;
+
+        const bomId = target.dataset.bomId;
+        
+        // Show loading spinner and hide table/compare section
+        loadingSpinner.style.display = 'block';
+        tableContainer.style.display = 'none';
+        compareSection.style.display = 'none';
+        bomFileName.textContent = 'Loading...';
+        tableBody.innerHTML = '';
+        fileErrorMessage.style.display = 'none'; // Hide any previous error
+
+        // Fetch data
+        fetch(`/bom/api/bom-data/${bomId}/`)
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => { throw new Error(err.error || 'Network response was not ok'); });
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Update UI
+                bomFileName.textContent = data.file_name;
+                
+                if (data.entries && data.entries.length > 0) {
+                    data.entries.forEach(entry => {
+                        const row = `<tr>
+                            <td>${entry.mpn}</td>
+                            <td>${entry.manufacturer}</td>
+                            <td>${entry.quantity}</td>
+                            <td>${entry.designators}</td>
+                        </tr>`;
+                        tableBody.insertAdjacentHTML('beforeend', row);
+                    });
+                    tableContainer.style.display = 'block';
+                    // Show compare section and set form action
+                    compareSection.style.display = 'block';
+                    masterBomIdInput.value = bomId;
+                    compareForm.action = `/bom/compare/${bomId}/`; // Redundant due to AJAX, but good practice
+                } else {
+                    tableBody.innerHTML = '<tr><td colspan="4">No data found for this BOM file.</td></tr>';
+                    tableContainer.style.display = 'block';
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching BOM data:', error);
+                bomFileName.textContent = 'Error: ' + error.message;
+            })
+            .finally(() => {
+                // Hide loading spinner
+                loadingSpinner.style.display = 'none';
+            });
+    });
+});
+</script>
+{% endblock %}
