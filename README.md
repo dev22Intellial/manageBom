@@ -28,6 +28,9 @@ This project is a Django-based web application designed to facilitate the compar
         *   Detailed tables showing Matching Parts (highlighting differences), Added Parts, and Removed Parts.
     *   Includes robust error handling and user-friendly messages for parsing failures.
 
+## Screenshots
+For a visual demonstration of the application's features, please refer to the screenshots located in the `demo_screenshots` folder.
+
 ## Setup Instructions
 
 ### Prerequisites
